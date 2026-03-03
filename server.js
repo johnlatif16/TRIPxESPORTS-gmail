@@ -1,6 +1,4 @@
 import express from "express";
-import path from "path";
-import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
@@ -8,6 +6,9 @@ import nodemailer from "nodemailer";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
 
@@ -22,51 +23,61 @@ app.use(cookieParser());
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PUBLIC_DIR = path.join(__dirname, "public");
-
 function mustEnv(name) {
   const v = process.env[name];
   if (!v) throw new Error(`Missing env: ${name}`);
   return v;
 }
 
+// ===== ENV =====
 const JWT_SECRET = mustEnv("JWT_SECRET");
 const ADMIN_USER = mustEnv("ADMIN_USER");
 const ADMIN_PASS_HASH = mustEnv("ADMIN_PASS_HASH");
 
+const SMTP_HOST = mustEnv("SMTP_HOST");
+const SMTP_USER = mustEnv("SMTP_USER");
+const SMTP_PASS = mustEnv("SMTP_PASS");
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
+const SMTP_SECURE = String(process.env.SMTP_SECURE || "false").toLowerCase() === "true";
+
 const BRAND_NAME = process.env.BRAND_NAME || "Clan TRIPxESPORTS";
 const BRAND_URL = process.env.BRAND_URL || "https://clan-tripxesports.up.railway.app";
-const LOGO_URL = process.env.LOGO_URL || ""; // رابط صورة اللوجو (png/jpg)
+const LOGO_URL = process.env.LOGO_URL || "";
 const FROM_NAME = process.env.FROM_NAME || BRAND_NAME;
 const FROM_EMAIL = mustEnv("FROM_EMAIL");
 
-// ====== Rate limits (تقليل سوء الاستخدام/سبام) ======
-const loginLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000,
-  max: 15,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+// ===== Rate limits =====
+const loginLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false });
+const sendLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false });
 
-const sendLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 8,
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// ====== SMTP transporter ======
+// ===== SMTP =====
 const transporter = nodemailer.createTransport({
-  host: mustEnv("SMTP_HOST"),
-  port: Number(process.env.SMTP_PORT || 587),
-  secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
-  auth: {
-    user: mustEnv("SMTP_USER"),
-    pass: mustEnv("SMTP_PASS"),
-  },
+  host: SMTP_HOST,
+  port: SMTP_PORT,
+  secure: SMTP_SECURE,
+  auth: { user: SMTP_USER, pass: SMTP_PASS },
 });
 
-// ====== Helpers ======
+// ===== Helpers =====
+function signToken(payload) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: "2h" });
+}
+
+function verifyToken(token) {
+  return jwt.verify(token, JWT_SECRET);
+}
+
+function authMiddleware(req, res, next) {
+  const token = req.cookies?.auth_token;
+  if (!token) return res.redirect("/login");
+  try {
+    req.user = verifyToken(token);
+    next();
+  } catch {
+    return res.redirect("/login");
+  }
+}
+
 function escapeHtml(str = "") {
   return String(str)
     .replaceAll("&", "&amp;")
@@ -76,12 +87,11 @@ function escapeHtml(str = "") {
     .replaceAll("'", "&#039;");
 }
 
-function buildEmailHtml({ toEmail, message, subject }) {
+// Email HTML (tables + inline CSS) – أسلوب مناسب لتوافق عملاء البريد
+function buildEmailHtml({ toEmail, subject, message }) {
   const safeMsg = escapeHtml(message).replaceAll("\n", "<br/>");
   const safeSubject = escapeHtml(subject || `رسالة من ${BRAND_NAME}`);
 
-  // تصميم HTML بإسلوب الجداول + inline CSS عشان يشتغل كويس في معظم برامج البريد
-  // (ده أسلوب شائع ومُوصى به في HTML email) 
   return `
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0;padding:0;background:#f5f6f8;">
     <tr>
@@ -134,70 +144,53 @@ function buildEmailHtml({ toEmail, message, subject }) {
   `;
 }
 
-function signToken(payload) {
-  // JWT معيار RFC 7519 
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "2h" });
+async function sendHtmlPage(res, filename) {
+  const filePath = path.join(__dirname, filename);
+  const html = await fs.readFile(filePath, "utf8");
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
 }
 
-function verifyToken(token) {
-  return jwt.verify(token, JWT_SECRET);
-}
-
-function authMiddleware(req, res, next) {
-  const token = req.cookies?.auth_token;
-  if (!token) return res.redirect("/login");
-
-  try {
-    const decoded = verifyToken(token);
-    req.user = decoded;
-    next();
-  } catch {
-    return res.redirect("/login");
-  }
-}
-
-// ====== Static ======
-app.use("/assets", express.static(path.join(PUBLIC_DIR, "assets")));
-
-// ====== Pages ======
+// ===== Routes (Pages) =====
 app.get("/", (req, res) => res.redirect("/dashboard"));
 
-app.get("/login", (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "login.html"));
+app.get("/login", async (req, res) => {
+  try {
+    await sendHtmlPage(res, "login.html");
+  } catch {
+    res.status(500).send("Missing login.html");
+  }
 });
 
-app.get("/dashboard", authMiddleware, (req, res) => {
-  res.sendFile(path.join(PUBLIC_DIR, "dashboard.html"));
+app.get("/dashboard", authMiddleware, async (req, res) => {
+  try {
+    await sendHtmlPage(res, "dashboard.html");
+  } catch {
+    res.status(500).send("Missing dashboard.html");
+  }
 });
 
-// ====== Auth API ======
+// ===== API: Auth =====
 app.post("/api/auth/login", loginLimiter, async (req, res) => {
   const { username, password } = req.body || {};
-  if (!username || !password) {
-    return res.status(400).json({ ok: false, error: "Missing username/password" });
-  }
+  if (!username || !password) return res.status(400).json({ ok: false, error: "Missing username/password" });
 
-  if (username !== ADMIN_USER) {
-    return res.status(401).json({ ok: false, error: "Invalid credentials" });
-  }
+  if (username !== ADMIN_USER) return res.status(401).json({ ok: false, error: "Invalid credentials" });
 
   const ok = await bcrypt.compare(String(password), ADMIN_PASS_HASH);
-  if (!ok) {
-    return res.status(401).json({ ok: false, error: "Invalid credentials" });
-  }
+  if (!ok) return res.status(401).json({ ok: false, error: "Invalid credentials" });
 
   const token = signToken({ sub: ADMIN_USER, role: "admin" });
 
-  // cookie httpOnly: المتصفح مش هيقدر يقرأ التوكن من JS (أفضل أمانًا) 
   res.cookie("auth_token", token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: true, // على Vercel HTTPS
+    secure: true, // Vercel https
     maxAge: 2 * 60 * 60 * 1000,
     path: "/",
   });
 
-  return res.json({ ok: true });
+  res.json({ ok: true });
 });
 
 app.post("/api/auth/logout", (req, res) => {
@@ -205,19 +198,14 @@ app.post("/api/auth/logout", (req, res) => {
   res.json({ ok: true });
 });
 
-// ====== Send API ======
+// ===== API: Send =====
 app.post("/api/send", authMiddleware, sendLimiter, async (req, res) => {
   try {
     const { toEmail, subject, message } = req.body || {};
-    if (!toEmail || !message) {
-      return res.status(400).json({ ok: false, error: "toEmail and message are required" });
-    }
+    if (!toEmail || !message) return res.status(400).json({ ok: false, error: "toEmail and message are required" });
+    if (String(message).length > 5000) return res.status(400).json({ ok: false, error: "Message too long" });
 
-    if (String(message).length > 5000) {
-      return res.status(400).json({ ok: false, error: "Message too long" });
-    }
-
-    const html = buildEmailHtml({ toEmail, message, subject });
+    const html = buildEmailHtml({ toEmail, subject, message });
 
     const info = await transporter.sendMail({
       from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
@@ -227,13 +215,12 @@ app.post("/api/send", authMiddleware, sendLimiter, async (req, res) => {
       text: message,
     });
 
-    // SMTP هو بروتوكول الإرسال القياسي 
-    return res.json({ ok: true, messageId: info.messageId });
+    res.json({ ok: true, messageId: info.messageId });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err?.message || "Send failed" });
+    res.status(500).json({ ok: false, error: err?.message || "Send failed" });
   }
 });
 
-// ====== Start ======
+// ===== Start =====
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Running on :${PORT}`));
