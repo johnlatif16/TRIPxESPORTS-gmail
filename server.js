@@ -106,7 +106,7 @@ function buildEmailHtml({ toEmail, subject, message }) {
   // لو مش حاطط LOGO_URL في env، هنستخدم اللينك اللي إنت بعته
   const logo = (LOGO_URL && String(LOGO_URL).trim())
     ? String(LOGO_URL).trim()
-    : "https://clan-tripxesports.up.railway.app/logo.png";
+    : "https://postimg.cc/kBjc8wZd";
 
   // Preheader (بيظهر جنب عنوان الإيميل في inbox)
   const preheader = escapeHtml(
