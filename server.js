@@ -103,79 +103,127 @@ function buildEmailHtml({ toEmail, subject, message }) {
   const safeMsg = escapeHtml(message).replaceAll("\n", "<br/>");
   const title = escapeHtml(subject || `رسالة من ${BRAND_NAME}`);
 
-  // 🔥 اللوجو ثابت هنا
-  const logo = "https://i.postimg.cc/0yvHTB0r/IMG-20260301-WA0034.jpg";
+  // لو مش حاطط LOGO_URL في env، هنستخدم اللينك اللي إنت بعته
+  const logo = (LOGO_URL && String(LOGO_URL).trim())
+    ? String(LOGO_URL).trim()
+    : "https://i.postimg.cc/0yvHTB0r/IMG-20260301-WA0034.jpg";
+
+  // Preheader (بيظهر جنب عنوان الإيميل في inbox)
+  const preheader = escapeHtml(
+    (String(message || "").trim().slice(0, 90) || `رسالة جديدة من ${BRAND_NAME}`)
+  );
 
   return `
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${title}</title>
 </head>
-<body style="margin:0;padding:0;background:#0f172a;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:30px 10px;">
+<body style="margin:0;padding:0;background:#0b0f1a;">
+  <!-- Preheader (hidden) -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+    ${preheader}
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0;padding:0;background:#0b0f1a;">
     <tr>
-      <td align="center">
-
-        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:18px;overflow:hidden;">
-
+      <td align="center" style="padding:28px 12px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;">
           <!-- Header -->
           <tr>
-            <td style="background:#111827;padding:20px;" align="left">
-              <table width="100%">
+            <td style="padding:0 0 12px 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#111827;border-radius:18px;overflow:hidden;">
                 <tr>
-                  <td style="vertical-align:middle;">
-                    <img src="${logo}" width="50" style="border-radius:12px;display:block;" />
+                  <td style="padding:16px 18px;" align="left">
+                    <table role="presentation" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="vertical-align:middle;">
+                          <img src="${logo}" width="44" height="44" alt="${escapeHtml(BRAND_NAME)}"
+                               style="display:block;border:0;border-radius:12px;object-fit:cover;" />
+                        </td>
+                        <td style="vertical-align:middle;padding-left:12px;font-family:Arial,Helvetica,sans-serif;">
+                          <div style="font-size:16px;line-height:22px;font-weight:800;color:#ffffff;">
+                            ${escapeHtml(BRAND_NAME)}
+                          </div>
+                          <div style="font-size:12px;line-height:18px;color:#a7b0c0;margin-top:2px;">
+                            ${title}
+                          </div>
+                        </td>
+                      </tr>
+                    </table>
                   </td>
-                  <td style="vertical-align:middle;padding-left:12px;font-family:Arial;color:#ffffff;">
-                    <div style="font-size:18px;font-weight:bold;">
-                      ${BRAND_NAME}
-                    </div>
-                    <div style="font-size:13px;color:#cbd5e1;margin-top:4px;">
-                      ${title}
-                    </div>
+                  <td style="padding:16px 18px;" align="right">
+                    <a href="${BRAND_URL}"
+                       style="font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:800;color:#ffffff;text-decoration:none;background:#2563eb;padding:10px 12px;border-radius:12px;display:inline-block;">
+                      زيارة الموقع
+                    </a>
                   </td>
                 </tr>
               </table>
             </td>
           </tr>
 
-          <!-- Message -->
+          <!-- Card -->
           <tr>
-            <td style="padding:25px;font-family:Arial;color:#111827;">
-              <div style="font-size:14px;color:#6b7280;margin-bottom:10px;">
-                إلى: ${escapeHtml(toEmail)}
-              </div>
+            <td>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                     style="background:#ffffff;border-radius:18px;overflow:hidden;">
+                <tr>
+                  <td style="padding:20px 20px 10px 20px;font-family:Arial,Helvetica,sans-serif;">
+                    <div style="font-size:14px;line-height:22px;color:#111827;font-weight:800;">
+                      رسالة
+                    </div>
+                    <div style="font-size:12px;line-height:18px;color:#6b7280;margin-top:6px;">
+                      إلى: ${escapeHtml(toEmail)}
+                    </div>
+                  </td>
+                </tr>
 
-              <div style="background:#f3f4f6;padding:18px;border-radius:14px;font-size:15px;line-height:24px;">
-                ${safeMsg}
-              </div>
+                <tr>
+                  <td style="padding:0 20px 20px 20px;font-family:Arial,Helvetica,sans-serif;">
+                    <div style="background:#f3f4f6;border-radius:16px;padding:16px;font-size:14px;line-height:24px;color:#111827;">
+                      ${safeMsg}
+                    </div>
+                  </td>
+                </tr>
+
+                <tr>
+                  <td style="padding:0 20px 20px 20px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="background:#111827;border-radius:14px;">
+                          <a href="${BRAND_URL}"
+                             style="display:inline-block;padding:12px 16px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:800;color:#ffffff;text-decoration:none;">
+                            فتح الموقع
+                          </a>
+                        </td>
+                        <td style="padding-left:10px;font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#6b7280;">
+                          تم الإرسال من لوحة تحكم ${escapeHtml(BRAND_NAME)}
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
 
-          <!-- Button -->
+          <!-- Footer -->
           <tr>
-            <td align="center" style="padding-bottom:25px;">
-              <a href="${BRAND_URL}"
-                 style="background:#2563eb;color:#ffffff;padding:12px 20px;border-radius:12px;text-decoration:none;font-weight:bold;font-family:Arial;">
-                زيارة الموقع
-              </a>
+            <td style="padding:14px 6px 0 6px;font-family:Arial,Helvetica,sans-serif;color:#9ca3af;font-size:11px;line-height:16px;" align="center">
+              © ${new Date().getFullYear()} ${escapeHtml(BRAND_NAME)} — جميع الحقوق محفوظة
             </td>
           </tr>
 
         </table>
-
-        <!-- Footer -->
-        <div style="color:#94a3b8;font-size:12px;margin-top:15px;font-family:Arial;">
-          © ${new Date().getFullYear()} ${BRAND_NAME}
-        </div>
-
       </td>
     </tr>
   </table>
 </body>
 </html>
-`;
+  `;
 }
 
 // ===== Pages =====
