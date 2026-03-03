@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard - SMTP</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; background:#f6f6f6; margin:0; padding:18px;}
+    .wrap{max-width:820px; margin:auto;}
+    .top{display:flex; gap:10px; align-items:center; justify-content:space-between; margin-bottom:12px;}
+    .card{background:#fff; border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.06); border:1px solid #ececec;}
+    h1{margin:0; font-size:18px;}
+    label{display:block; margin:10px 0 6px; font-weight:800;}
+    input,textarea{width:100%; padding:12px; border-radius:12px; border:1px solid #ddd; font-size:16px;}
+    textarea{min-height:140px; resize:vertical;}
+    .row{display:flex; gap:10px; flex-wrap:wrap;}
+    .row > div{flex:1; min-width:220px;}
+    button{padding:12px 14px; border-radius:12px; border:0; background:#111; color:#fff; font-weight:900; font-size:15px;}
+    button.secondary{background:#e9e9e9; color:#111;}
+    .msg{margin-top:10px; font-size:13px; min-height:18px;}
+    .ok{color:#0a7a2f;}
+    .bad{color:#b00020;}
+    .hint{color:#666; font-size:12px; line-height:18px;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <h1>SMTP Dashboard</h1>
+      <button class="secondary" id="logout">Logout</button>
+    </div>
+
+    <div class="card">
+      <div class="hint">دخل البريد + الرسالة واضغط "وابعت" — الإيميل هيوصل بتصميم حلو + لوجو واسم حسب إعدادات السيرفر.</div>
+
+      <div class="row">
+        <div>
+          <label>البريد الإلكتروني</label>
+          <input id="toEmail" type="email" placeholder="example@email.com" required />
+        </div>
+        <div>
+          <label>العنوان (Subject)</label>
+          <input id="subject" type="text" placeholder="رسالة من Clan TRIPxESPORTS" />
+        </div>
+      </div>
+
+      <label>الرسالة</label>
+      <textarea id="message" placeholder="اكتب الرسالة هنا..."></textarea>
+
+      <div class="row" style="margin-top:12px;">
+        <div><button id="send">وابعت</button></div>
+        <div><button class="secondary" id="fill">تجربة (Fill)</button></div>
+      </div>
+
+      <div class="msg" id="status"></div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const statusEl = $("status");
+
+    $("fill").onclick = () => {
+      $("toEmail").value = "test@example.com";
+      $("subject").value = "رسالة تجريبية";
+      $("message").value = "أهلًا 👋\nدي رسالة تجريبية من لوحة تحكم Clan TRIPxESPORTS.\n\nشكراً!";
+    };
+
+    $("logout").onclick = async () => {
+      await fetch("/api/auth/logout", { method: "POST" });
+      location.href = "/login";
+    };
+
+    $("send").onclick = async () => {
+      statusEl.className = "msg";
+      statusEl.textContent = "جاري الإرسال...";
+
+      const payload = {
+        toEmail: $("toEmail").value.trim(),
+        subject: $("subject").value.trim(),
+        message: $("message").value
+      };
+
+      const r = await fetch("/api/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await r.json().catch(()=>null);
+
+      if (!r.ok) {
+        statusEl.className = "msg bad";
+        statusEl.textContent = (data && data.error) ? data.error : "فشل الإرسال";
+        return;
+      }
+
+      statusEl.className = "msg ok";
+      statusEl.textContent = "تم الإرسال ✅ (messageId: " + (data.messageId || "-") + ")";
+    };
+  </script>
+</body>
+</html>
