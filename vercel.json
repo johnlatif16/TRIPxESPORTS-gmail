@@ -3,7 +3,7 @@
   "builds": [{ "src": "server.js", "use": "@vercel/node" }],
   "functions": {
     "server.js": {
-      "includeFiles": "login.html|dashboard.html"
+      "includeFiles": "*.html"
     }
   },
   "routes": [{ "src": "/(.*)", "dest": "/server.js" }]
