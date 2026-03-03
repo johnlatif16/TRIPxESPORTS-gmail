@@ -20,7 +20,6 @@
     .msg{margin-top:10px; font-size:13px; min-height:18px;}
     .ok{color:#0a7a2f;}
     .bad{color:#b00020;}
-    .hint{color:#666; font-size:12px; line-height:18px;}
   </style>
 </head>
 <body>
@@ -31,15 +30,13 @@
     </div>
 
     <div class="card">
-      <div class="hint">دخل البريد + الرسالة واضغط "وابعت" — الإيميل هيوصل بتصميم حلو + لوجو واسم حسب إعدادات السيرفر.</div>
-
       <div class="row">
         <div>
-          <label>البريد الإلكتروني</label>
+          <label>إلى</label>
           <input id="toEmail" type="email" placeholder="example@email.com" required />
         </div>
         <div>
-          <label>العنوان (Subject)</label>
+          <label>العنوان</label>
           <input id="subject" type="text" placeholder="رسالة من Clan TRIPxESPORTS" />
         </div>
       </div>
@@ -48,8 +45,8 @@
       <textarea id="message" placeholder="اكتب الرسالة هنا..."></textarea>
 
       <div class="row" style="margin-top:12px;">
-        <div><button id="send">وابعت</button></div>
-        <div><button class="secondary" id="fill">تجربة (Fill)</button></div>
+        <div><button id="send">إرسال</button></div>
+        <div><button class="secondary" id="fill">تجربة</button></div>
       </div>
 
       <div class="msg" id="status"></div>
@@ -96,7 +93,7 @@
       }
 
       statusEl.className = "msg ok";
-      statusEl.textContent = "تم الإرسال ✅ (messageId: " + (data.messageId || "-") + ")";
+      statusEl.textContent = "تم الإرسال ✅";
     };
   </script>
 </body>
