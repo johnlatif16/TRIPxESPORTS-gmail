@@ -7,7 +7,6 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import fs from "fs/promises";
 import path from "path";
-import { fileURLToPath } from "url";
 
 dotenv.config();
 
@@ -18,9 +17,6 @@ app.use(helmet());
 app.use(express.json({ limit: "200kb" }));
 app.use(express.urlencoded({ extended: true, limit: "200kb" }));
 app.use(cookieParser());
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 function mustEnv(name) {
   const v = process.env[name];
@@ -98,7 +94,7 @@ function escapeHtml(str = "") {
     .replaceAll("'", "&#039;");
 }
 
-// Email HTML (tables + inline CSS)
+// Email HTML (tables + inline CSS) لعرض أفضل عبر عملاء البريد
 function buildEmailHtml({ toEmail, subject, message }) {
   const safeMsg = escapeHtml(message).replaceAll("\n", "<br/>");
   const safeSubject = escapeHtml(subject || `رسالة من ${BRAND_NAME}`);
@@ -156,7 +152,8 @@ function buildEmailHtml({ toEmail, subject, message }) {
 }
 
 async function sendHtmlPage(res, filename) {
-  const filePath = path.join(__dirname, filename);
+  // مهم على Vercel: اقرأ من process.cwd() + includeFiles في vercel.json
+  const filePath = path.join(process.cwd(), filename);
   const html = await fs.readFile(filePath, "utf8");
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(html);
@@ -168,16 +165,16 @@ app.get("/", (req, res) => res.redirect("/dashboard"));
 app.get("/login", async (req, res) => {
   try {
     await sendHtmlPage(res, "login.html");
-  } catch {
-    res.status(500).send("Missing login.html (put it next to server.js)");
+  } catch (e) {
+    res.status(500).send("Missing login.html (must be next to server.js + included in Vercel function)");
   }
 });
 
 app.get("/dashboard", authMiddleware, async (req, res) => {
   try {
     await sendHtmlPage(res, "dashboard.html");
-  } catch {
-    res.status(500).send("Missing dashboard.html (put it next to server.js)");
+  } catch (e) {
+    res.status(500).send("Missing dashboard.html (must be next to server.js + included in Vercel function)");
   }
 });
 
@@ -194,11 +191,10 @@ app.post("/api/auth/login", loginLimiter, async (req, res) => {
 
   const token = signToken({ sub: ADMIN_USER, role: "admin" });
 
-  // httpOnly cookie recommended for JWT in browsers 
   res.cookie("auth_token", token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: true, // Vercel uses HTTPS
+    secure: true, // Vercel HTTPS
     maxAge: 2 * 60 * 60 * 1000,
     path: "/",
   });
@@ -232,13 +228,14 @@ app.post("/api/send", authMiddleware, sendLimiter, async (req, res) => {
       text: message,
     });
 
-    // SMTP is the standard email transport protocol 
+    // SMTP RFC 5321 
     return res.json({ ok: true, messageId: info.messageId });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err?.message || "Send failed" });
   }
 });
 
-// ===== Start =====
+// ===== Start (Local only) =====
+// على Vercel مش هيحتاج listen فعليًا، بس وجوده مش بيكسر محليًا.
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Running on :${PORT}`));
