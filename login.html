@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Login - SMTP Dashboard</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; background:#f6f6f6; margin:0; padding:24px;}
+    .card{max-width:520px; margin:auto; background:#fff; border-radius:16px; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.06); border:1px solid #ececec;}
+    h1{margin:0 0 10px; font-size:18px;}
+    label{display:block; margin:10px 0 6px; font-weight:700;}
+    input{width:100%; padding:12px; border-radius:12px; border:1px solid #ddd; font-size:16px;}
+    button{width:100%; padding:12px; border-radius:12px; border:0; background:#111; color:#fff; font-weight:800; font-size:16px; margin-top:12px;}
+    .err{margin-top:10px; color:#b00020; font-size:13px; min-height:18px;}
+    .hint{margin-top:10px; color:#666; font-size:12px; line-height:18px;}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>تسجيل الدخول</h1>
+    <div class="hint">لوحة تحكم إرسال البريد (SMTP)</div>
+
+    <form id="f">
+      <label>Username</label>
+      <input name="username" autocomplete="username" required />
+
+      <label>Password</label>
+      <input name="password" type="password" autocomplete="current-password" required />
+
+      <button type="submit">دخول</button>
+      <div class="err" id="err"></div>
+    </form>
+  </div>
+
+  <script>
+    const f = document.getElementById('f');
+    const err = document.getElementById('err');
+
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      err.textContent = "";
+
+      const fd = new FormData(f);
+      const body = { username: fd.get('username'), password: fd.get('password') };
+
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+
+      const data = await r.json().catch(()=>null);
+      if (!r.ok) {
+        err.textContent = (data && data.error) ? data.error : "Login failed";
+        return;
+      }
+      location.href = "/dashboard";
+    });
+  </script>
+</body>
+</html>
