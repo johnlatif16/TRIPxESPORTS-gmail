@@ -1,7 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
@@ -32,7 +31,7 @@ function mustEnv(name) {
 // ===== ENV =====
 const JWT_SECRET = mustEnv("JWT_SECRET");
 const ADMIN_USER = mustEnv("ADMIN_USER");
-const ADMIN_PASS_HASH = mustEnv("ADMIN_PASS_HASH");
+const ADMIN_PASS = mustEnv("ADMIN_PASS");
 
 const SMTP_HOST = mustEnv("SMTP_HOST");
 const SMTP_USER = mustEnv("SMTP_USER");
@@ -47,8 +46,19 @@ const FROM_NAME = process.env.FROM_NAME || BRAND_NAME;
 const FROM_EMAIL = mustEnv("FROM_EMAIL");
 
 // ===== Rate limits =====
-const loginLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 15, standardHeaders: true, legacyHeaders: false });
-const sendLimiter = rateLimit({ windowMs: 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false });
+const loginLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const sendLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // ===== SMTP =====
 const transporter = nodemailer.createTransport({
@@ -60,6 +70,7 @@ const transporter = nodemailer.createTransport({
 
 // ===== Helpers =====
 function signToken(payload) {
+  // JWT per RFC 7519 
   return jwt.sign(payload, JWT_SECRET, { expiresIn: "2h" });
 }
 
@@ -87,7 +98,7 @@ function escapeHtml(str = "") {
     .replaceAll("'", "&#039;");
 }
 
-// Email HTML (tables + inline CSS) – أسلوب مناسب لتوافق عملاء البريد
+// Email HTML (tables + inline CSS)
 function buildEmailHtml({ toEmail, subject, message }) {
   const safeMsg = escapeHtml(message).replaceAll("\n", "<br/>");
   const safeSubject = escapeHtml(subject || `رسالة من ${BRAND_NAME}`);
@@ -100,13 +111,13 @@ function buildEmailHtml({ toEmail, subject, message }) {
           ${LOGO_URL ? `
           <tr>
             <td style="padding:0;">
-              <img src="${LOGO_URL}" alt="${BRAND_NAME}" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;"/>
+              <img src="${LOGO_URL}" alt="${escapeHtml(BRAND_NAME)}" width="600" style="display:block;width:100%;max-width:600px;height:auto;border:0;"/>
             </td>
           </tr>` : ""}
 
           <tr>
             <td style="padding:18px 18px 8px 18px;font-family:Arial,Helvetica,sans-serif;">
-              <div style="font-size:18px;line-height:26px;font-weight:800;color:#111;">${BRAND_NAME}</div>
+              <div style="font-size:18px;line-height:26px;font-weight:800;color:#111;">${escapeHtml(BRAND_NAME)}</div>
               <div style="font-size:13px;line-height:20px;color:#666;margin-top:6px;">${safeSubject}</div>
             </td>
           </tr>
@@ -133,7 +144,7 @@ function buildEmailHtml({ toEmail, subject, message }) {
           <tr>
             <td style="padding:14px 18px;background:#0b0b0b;font-family:Arial,Helvetica,sans-serif;">
               <div style="font-size:12px;line-height:18px;color:#cfcfcf;">
-                © ${new Date().getFullYear()} ${BRAND_NAME}
+                © ${new Date().getFullYear()} ${escapeHtml(BRAND_NAME)}
               </div>
             </td>
           </tr>
@@ -151,14 +162,14 @@ async function sendHtmlPage(res, filename) {
   res.send(html);
 }
 
-// ===== Routes (Pages) =====
+// ===== Pages =====
 app.get("/", (req, res) => res.redirect("/dashboard"));
 
 app.get("/login", async (req, res) => {
   try {
     await sendHtmlPage(res, "login.html");
   } catch {
-    res.status(500).send("Missing login.html");
+    res.status(500).send("Missing login.html (put it next to server.js)");
   }
 });
 
@@ -166,31 +177,33 @@ app.get("/dashboard", authMiddleware, async (req, res) => {
   try {
     await sendHtmlPage(res, "dashboard.html");
   } catch {
-    res.status(500).send("Missing dashboard.html");
+    res.status(500).send("Missing dashboard.html (put it next to server.js)");
   }
 });
 
 // ===== API: Auth =====
 app.post("/api/auth/login", loginLimiter, async (req, res) => {
   const { username, password } = req.body || {};
-  if (!username || !password) return res.status(400).json({ ok: false, error: "Missing username/password" });
+  if (!username || !password) {
+    return res.status(400).json({ ok: false, error: "Missing username/password" });
+  }
 
-  if (username !== ADMIN_USER) return res.status(401).json({ ok: false, error: "Invalid credentials" });
-
-  const ok = await bcrypt.compare(String(password), ADMIN_PASS_HASH);
-  if (!ok) return res.status(401).json({ ok: false, error: "Invalid credentials" });
+  if (String(username) !== ADMIN_USER || String(password) !== ADMIN_PASS) {
+    return res.status(401).json({ ok: false, error: "Invalid credentials" });
+  }
 
   const token = signToken({ sub: ADMIN_USER, role: "admin" });
 
+  // httpOnly cookie recommended for JWT in browsers 
   res.cookie("auth_token", token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: true, // Vercel https
+    secure: true, // Vercel uses HTTPS
     maxAge: 2 * 60 * 60 * 1000,
     path: "/",
   });
 
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
 
 app.post("/api/auth/logout", (req, res) => {
@@ -202,8 +215,12 @@ app.post("/api/auth/logout", (req, res) => {
 app.post("/api/send", authMiddleware, sendLimiter, async (req, res) => {
   try {
     const { toEmail, subject, message } = req.body || {};
-    if (!toEmail || !message) return res.status(400).json({ ok: false, error: "toEmail and message are required" });
-    if (String(message).length > 5000) return res.status(400).json({ ok: false, error: "Message too long" });
+    if (!toEmail || !message) {
+      return res.status(400).json({ ok: false, error: "toEmail and message are required" });
+    }
+    if (String(message).length > 5000) {
+      return res.status(400).json({ ok: false, error: "Message too long" });
+    }
 
     const html = buildEmailHtml({ toEmail, subject, message });
 
@@ -215,9 +232,10 @@ app.post("/api/send", authMiddleware, sendLimiter, async (req, res) => {
       text: message,
     });
 
-    res.json({ ok: true, messageId: info.messageId });
+    // SMTP is the standard email transport protocol 
+    return res.json({ ok: true, messageId: info.messageId });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err?.message || "Send failed" });
+    return res.status(500).json({ ok: false, error: err?.message || "Send failed" });
   }
 });
 
