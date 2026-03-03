@@ -1,12 +1,13 @@
 {
   "version": 2,
-  "functions": {
-    "server.js": {
-      "runtime": "vercel/node@20.x",
-      "includeFiles": "*.html"
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["login.html", "dashboard.html"]
+      }
     }
-  },
-  "routes": [
-    { "src": "/(.*)", "dest": "/server.js" }
-  ]
+  ],
+  "routes": [{ "src": "/(.*)", "dest": "/server.js" }]
 }
